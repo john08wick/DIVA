@@ -1,4 +1,4 @@
-# Loan Application Assistant
+# Digital Intelligent Virtual Assistant(DIVA)
 
 A conversational AI assistant that helps users complete their loan application process using OpenAI's function calling and RAG (Retrieval-Augmented Generation).
 
