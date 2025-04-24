@@ -1,7 +1,7 @@
 const OpenAI = require('openai');
 const LoanAPI = require('../api/loanApi');
 const DocumentStore = require('../rag/documentStore');
-const functions = require('../openai/functions');
+const { functions } = require('../openai/functions');
 const PredictiveEngine = require('./PredictiveEngine');
 const AnalyticsEngine = require('./AnalyticsEngine');
 const MediaHandler = require('./MediaHandler');
@@ -127,9 +127,8 @@ class LoanAssistant {
     }
 
     async handleMessage(input, attachedMedia = null) {
+        const messageId = this.generateMessageId();
         try {
-            const messageId = this.generateMessageId();
-            
             // Initial status - Processing
             this.updateMessageStatus(messageId, 'PROCESSING');
             
@@ -176,12 +175,16 @@ class LoanAssistant {
             // Handle timeout/session expiry
             if (this.isSessionExpired()) {
                 return {
-                    messageId,
                     message: await this.translateText(
                         "Your session has expired. Let's start fresh. How can I help you today?",
                         detectedLanguage
                     ),
-                    status: this.conversationContext.messageStatus
+                    suggestedActions: [
+                        "Would you like to start a new session?",
+                        "Should we continue from where we left off?",
+                        "Would you like to review your previous conversation?"
+                    ],
+                    success: false
                 };
             }
 
@@ -200,104 +203,35 @@ class LoanAssistant {
                 return await this.handleUserFrustration(detectedLanguage);
             }
 
-            // Regular message handling
-            let response;
-            if (this.isGeneralQuestion(message)) {
-                response = await this.handleGeneralQuestion(message);
-            } else {
-                // Add language context to the conversation
-                logger.debug('Making OpenAI API call with context:', {
-                    messageHistory: this.buildConversationHistory(message),
-                    language: detectedLanguage
-                });
-
-                const aiResponse = await this.openai.chat.completions.create({
-                    model: "gpt-4",
-                    messages: [
-                        ...this.buildConversationHistory(message),
-                        {
-                            role: "system",
-                            content: `The user is communicating in ${detectedLanguage}. Generate a response that will be translated to their language.`
-                        }
-                    ],
-                    functions: functions,
-                    function_call: "auto",
-                    temperature: this.calculateDynamicTemperature()
-                });
-
-                const assistantMessage = aiResponse.choices[0].message;
-                
-                logger.debug('OpenAI API Response:', {
-                    message: assistantMessage.content,
-                    functionCall: assistantMessage.function_call,
-                    model: aiResponse.model,
-                    usage: aiResponse.usage
-                });
-                
-                if (assistantMessage.function_call) {
-                    // Update status to SENT when function is identified
-                    this.updateMessageStatus(messageId, 'SENT', assistantMessage.function_call.name);
-                    
-                    logger.info('Function call identified:', {
-                        name: assistantMessage.function_call.name,
-                        arguments: assistantMessage.function_call.arguments,
-                        messageId
-                    });
-                    
-                    const result = await this.handleFunctionCall(assistantMessage.function_call, messageId);
-                    this.updateContext(assistantMessage.function_call.name, result);
-                    response = {
-                        messageId,
-                        message: result.message,
-                        success: result.success,
-                        functionCall: assistantMessage.function_call,
-                        status: this.conversationContext.messageStatus
-                    };
-                } else {
-                    // Update status to DELIVERED for direct messages
-                    this.updateMessageStatus(messageId, 'DELIVERED');
-                    response = {
-                        messageId,
-                        message: assistantMessage.content,
-                        suggestedActions: [],
-                        status: this.conversationContext.messageStatus
-                    };
-                }
-            }
-
-            // Enrich response with insights
-            const enrichedResponse = await this.enrichResponseWithInsights(response, predictions);
-            
-            // Ensure the response is in the same language as the input
-            const translatedResponse = await this.ensureLanguageConsistency(enrichedResponse, detectedLanguage);
-            
-            // Store the translated response
-            this.storeAssistantResponse({
-                ...translatedResponse,
-                messageId,
-                status: this.conversationContext.messageStatus
+            // Generate response using OpenAI
+            const response = await this.openai.chat.completions.create({
+                model: "gpt-4",
+                messages: this.buildConversationHistory(message),
+                functions: functions,
+                function_call: "auto",
+                temperature: this.calculateDynamicTemperature()
             });
-            
-            logger.info('Message handled successfully', { response: translatedResponse });
 
-            // Save progress after processing
-            if (userId !== 'anonymous') {
-                await this.saveProgress(userId);
-            }
-            
-            return response;
 
+            // Process the response
+            const result = await this.processResponse(response, messageId);
+            
+            // Update message status to success
+            this.updateMessageStatus(messageId, 'SUCCESS');
+            
+            return result;
         } catch (error) {
-            // Update status to ERROR in case of failure
+            logger.error('Error handling message', error);
             this.updateMessageStatus(messageId, 'ERROR');
-            logger.error('Error in handleMessage', error);
-            const errorResponse = await this.handleError(error);
             return {
-                messageId,
+                message: "I'm sorry, but I ran into a problem. Allow me to assist you in getting back on course.",
+                suggestedActions: [
+                    "Would you like to give it another shot?",
+                    "Should we begin from the last successful step?",
+                    "Would you like to talk to a live representative?"
+                ],
                 success: false,
-                message: `Error: ${error.message}`,
-                error: error,
-                status: this.conversationContext.messageStatus
+                error: error.message
             };
         }
     }
@@ -332,6 +266,69 @@ class LoanAssistant {
         return enrichedResponse;
     }
 
+    async processResponse(response, messageId) {
+        try {
+            const assistantMessage = response.choices[0].message;
+            
+        logger.debug('OpenAI API Response:', {
+                message: assistantMessage.content,
+                functionCall: assistantMessage.function_call,
+                model: response.model,
+                usage: response.usage
+            });
+            
+            if (assistantMessage.function_call) {
+                // Update status to SENT when function is identified
+                this.updateMessageStatus(messageId, 'SENT', assistantMessage.function_call.name);
+                
+                logger.info('Function call identified:', {
+                    name: assistantMessage.function_call.name,
+                    arguments: assistantMessage.function_call.arguments,
+                    messageId
+                });
+                
+                const result = await this.handleFunctionCall(assistantMessage.function_call, messageId);
+                this.updateContext(assistantMessage.function_call.name, result);
+                
+                return {
+                    message: result.message || "I've processed your request.",
+                    suggestedActions: result.suggestedActions || [
+                        "Would you like to proceed with the next step?",
+                        "Should we review the details?",
+                        "Would you like to make any changes?"
+                    ],
+                    success: result.success,
+                    data: result.data
+                };
+            } else {
+                // Update status to DELIVERED for direct messages
+                this.updateMessageStatus(messageId, 'DELIVERED');
+                
+                return {
+                    message: assistantMessage.content || "I'm here to help you.",
+                    suggestedActions: [
+                        "Would you like to know more?",
+                        "Should we proceed with the next step?",
+                        "Would you like to review the previous steps?"
+                    ],
+                    success: true
+                };
+            }
+        } catch (error) {
+            logger.error('Error processing response', error);
+            return {
+                message: "I'm sorry, but I ran into a problem. Allow me to assist you in getting back on course.",
+                suggestedActions: [
+                    "Would you like to give it another shot?",
+                    "Should we begin from the last successful step?",
+                    "Would you like to talk to a live representative?"
+                ],
+                success: false,
+                error: error.message
+            };
+        }
+    }
+
     async handleError(error) {
         // Log error for analytics
         this.analyticsEngine.addUserFeedback({
@@ -340,17 +337,15 @@ class LoanAssistant {
             stack: error.stack
         });
 
-        const language = this.conversationContext.preferredLanguage;
         return {
-            message: await this.translateText(
-                "I apologize, but I encountered an error. Let me help you get back on track.",
-                language
-            ),
-            suggestedActions: await Promise.all([
-                this.translateText("Would you like to try again?", language),
-                this.translateText("Should we start from the last successful step?", language),
-                this.translateText("Would you like to speak with a human agent?", language)
-            ])
+            message: "I'm sorry, but I ran into a problem. Allow me to assist you in getting back on course.",
+            suggestedActions: [
+                "Would you like to give it another shot?",
+                "Should we begin from the last successful step?",
+                "Would you like to talk to a live representative?"
+            ],
+            success: false,
+            error: error.message
         };
     }
 
