@@ -16,11 +16,20 @@ const VerificationLogApi = require('./api/verificationLogApi');
 const app = express();
 const port = process.env.PORT || 3000;
 
-// Enable CORS
+// Enable CORS with specific configuration
 app.use(cors({
     origin: '*',  // Allow all origins
     methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'],
-    allowedHeaders: ['Content-Type', 'Authorization', 'X-SourcingChannelCode', 'X-Signature', 'X-Timestamp']
+    allowedHeaders: [
+        'Content-Type',
+        'Authorization',
+        'X-SourcingChannelCode',
+        'X-Signature',
+        'X-Timestamp',
+        'Accept'
+    ],
+    credentials: true,
+    maxAge: 86400  // 24 hours
 }));
 
 // Initialize the loan assistant
