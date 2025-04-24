@@ -20,50 +20,25 @@ class ApiError extends Error {
     }
 }
 
-// Create axios instance with base configuration for DSP APIs
+// Create axios instance with default config
 const apiClient = axios.create({
-    baseURL: apiConfig.getBaseUrl(), // This will always point to DSP API
-    timeout: apiConfig.timeouts.default,
-    headers: {
-        'Content-Type': 'application/json',
-        'Accept': 'application/json'
-    }
+    baseURL: process.env.API_BASE_URL || 'https://api.staging.dspfin.com/los/api/v1',
+    timeout: apiConfig.timeouts.default
 });
 
-// Create axios instance for chat assistant
-const chatAssistantClient = axios.create({
-    baseURL: apiConfig.getChatAssistantUrl(),
-    timeout: apiConfig.timeouts.default,
-    headers: {
-        'Content-Type': 'application/json',
-        'Accept': 'application/json'
-    }
-});
-
-// Configure retry logic
+// Configure retry behavior
 axiosRetry(apiClient, {
-    retries: 3,
-    retryDelay: axiosRetry.exponentialDelay,
+    retries: apiConfig.retry.maxAttempts,
+    retryDelay: (retryCount) => {
+        return Math.min(
+            apiConfig.retry.initialDelay * Math.pow(apiConfig.retry.backoffFactor, retryCount - 1),
+            apiConfig.retry.maxDelay
+        );
+    },
     retryCondition: (error) => {
-        // Retry on network errors
-        if (axiosRetry.isNetworkError(error)) return true;
-        
-        // Retry on 5xx errors
-        if (error.response && error.response.status >= 500) return true;
-        
-        // Retry on rate limits
-        if (error.response && error.response.status === 429) return true;
-        
-        // Don't retry on client errors (4xx) except rate limits
-        return false;
+        return axiosRetry.isNetworkOrIdempotentRequestError(error) ||
+               (error.response && error.response.status === 429);
     }
-});
-
-// Configure retry logic for chat assistant
-axiosRetry(chatAssistantClient, {
-    retries: 2, // Less retries for chat
-    retryDelay: axiosRetry.exponentialDelay,
-    retryCondition: axiosRetry.isNetworkOrIdempotentRequestError
 });
 
 // Request interceptor to add authentication headers
@@ -76,27 +51,23 @@ apiClient.interceptors.request.use(
                 config.data
             );
             
-            // Add authentication headers to request, preserving case
+            // Add authentication headers to request
             config.headers = {
                 'Accept': '*/*',
                 'Content-Type': 'application/json',
                 ...authHeaders
             };
             
-            // Log request details in development
-            if (process.env.NODE_ENV === 'development' || process.env.DEBUG === 'true') {
-                console.log(`[API Request] ${config.method.toUpperCase()} ${config.url}`, {
-                    headers: config.headers,
-                    data: config.data
-                });
-            }
-
-            // Debug log for all environments
-            console.log('[API Debug] Final request headers:', config.headers);
+            // Log the request details
+            console.log('API Request Details:', {
+                baseURL: config.baseURL,
+                url: config.url,
+                method: config.method,
+                headers: config.headers
+            });
             
             return config;
         } catch (error) {
-            // Convert auth setup errors to AuthenticationError
             throw new AuthenticationError(
                 `Failed to set up authentication: ${error.message}`
             );
@@ -109,137 +80,17 @@ apiClient.interceptors.request.use(
 
 // Response interceptor for error handling
 apiClient.interceptors.response.use(
-    response => {
-        // Log response in development
-        if (process.env.NODE_ENV === 'development' || process.env.DEBUG === 'true') {
-            console.log(`[API Response] ${response.config.method.toUpperCase()} ${response.config.url}`, {
-                status: response.status,
-                data: response.data
-            });
-        }
-        return response.data;
-    },
-    async error => {
-        // Log error in development
-        if (process.env.NODE_ENV === 'development' || process.env.DEBUG === 'true') {
-            console.error('[API Error]', {
-                config: error.config,
-                response: error.response?.data,
-                message: error.message
-            });
-        }
-
+    response => response.data,
+    error => {
         if (error.response) {
-            const { status, data } = error.response;
-            const message = data?.message || 'Unknown error';
-            
-            // Handle specific error status codes
-            switch (status) {
-                case 401:
-                    throw new AuthenticationError(
-                        'Authentication failed. Please check if DSP_SECRET_KEY and DSP_CHANNEL_CODE are configured.'
-                    );
-                case 403:
-                    throw new ApiError(
-                        'Access forbidden. You do not have permission to access this resource.',
-                        status,
-                        data
-                    );
-                case 404:
-                    throw new ApiError(
-                        'Resource not found. Please check the API endpoint.',
-                        status,
-                        data
-                    );
-                case 429:
-                    throw new ApiError(
-                        'Rate limit exceeded. Please try again later.',
-                        status,
-                        data
-                    );
-                default:
-                    throw new ApiError(
-                        `Request failed: ${message}`,
-                        status,
-                        data
-                    );
-            }
-        } else if (error.request) {
             throw new ApiError(
-                'No response received from server. Please check your network connection.',
-                0
-            );
-        } else if (error instanceof AuthenticationError) {
-            throw error; // Re-throw authentication errors
-        } else {
-            throw new ApiError(
-                `Request setup failed: ${error.message}`,
-                0
+                error.response.data.message || 'API request failed',
+                error.response.status,
+                error.response.data
             );
         }
+        throw error;
     }
 );
 
-// Helper method for retrying requests
-const withRetry = async (requestFn) => {
-    try {
-        return await requestFn();
-    } catch (error) {
-        // If it's already been through the axios-retry process, just throw
-        if (error.config && error.config['axios-retry']) {
-            throw error;
-        }
-        
-        // Create a new axios instance with retry config
-        const retryClient = axios.create(apiClient.defaults);
-        axiosRetry(retryClient, {
-            retries: 3,
-            retryDelay: axiosRetry.exponentialDelay
-        });
-        
-        // Execute the request with the retry-enabled client
-        return retryClient(requestFn.config);
-    }
-};
-
-// Helper methods for common API operations
-const api = {
-    // DSP API methods
-    async get(endpoint, config = {}) {
-        return apiClient.get(endpoint, config);
-    },
-
-    async post(endpoint, data = {}, config = {}) {
-        return apiClient.post(endpoint, data, config);
-    },
-
-    async put(endpoint, data = {}, config = {}) {
-        return apiClient.put(endpoint, data, config);
-    },
-
-    async delete(endpoint, config = {}) {
-        return apiClient.delete(endpoint, config);
-    },
-
-    // Chat assistant methods
-    async chatAssistant(message, config = {}) {
-        return chatAssistantClient.post('/chat', { message }, config);
-    },
-
-    // Method for long-running requests
-    async getLongRunning(endpoint, config = {}) {
-        return apiClient.get(endpoint, {
-            ...config,
-            timeout: apiConfig.timeouts.long
-        });
-    },
-
-    // Retry wrapper
-    withRetry,
-
-    // Error classes for external use
-    AuthenticationError,
-    ApiError
-};
-
-module.exports = api; 
+module.exports = apiClient; 

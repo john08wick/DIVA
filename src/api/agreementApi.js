@@ -26,4 +26,4 @@ class AgreementAPI {
     }
 }
 
-module.exports = new AgreementAPI(); 
+module.exports = AgreementAPI; 

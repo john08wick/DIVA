@@ -79,4 +79,4 @@ class MandateAPI {
     }
 }
 
-module.exports = new MandateAPI();
+module.exports = MandateAPI;

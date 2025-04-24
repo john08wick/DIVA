@@ -1,5 +1,6 @@
-const apiClient = require('../utils/apiClient');
+const { default: axios } = require('axios');
 const config = require('../config/apiConfig');
+const apiClient = require('../utils/apiClient');
 
 // Add logging utility
 const logger = {
@@ -73,11 +74,27 @@ class MutualFundFetchAPI {
      * @returns {Error} Formatted error
      */
     handleError(error) {
-        logger.error('API error occurred', error);
+        logger.error('API error occurred', {
+            name: error.name,
+            message: error.message,
+            stack: error.stack,
+            code: error.code,
+            response: error.response?.data,
+            config: {
+                url: error.config?.url,
+                method: error.config?.method,
+                headers: error.config?.headers,
+                data: error.config?.data
+            }
+        });
 
         if (!error.response) {
-            const networkError = new Error('Network error occurred');
-            logger.error('Network error', networkError);
+            const networkError = new Error(`Network error occurred: ${error.message}`);
+            logger.error('Network error details:', {
+                message: error.message,
+                code: error.code,
+                stack: error.stack
+            });
             return networkError;
         }
 
@@ -91,7 +108,7 @@ class MutualFundFetchAPI {
                 } else if (data.fenixErrorCode === 'INVALID_MOBILE') {
                     formattedError = new Error('Invalid mobile number provided');
                 } else {
-                    formattedError = new Error('Invalid request parameters');
+                    formattedError = new Error(`Invalid request parameters: ${JSON.stringify(data)}`);
                 }
                 break;
             case 401:
@@ -101,10 +118,17 @@ class MutualFundFetchAPI {
                 formattedError = new Error('Portfolio details not found');
                 break;
             default:
-                formattedError = new Error('An unexpected error occurred');
+                formattedError = new Error(`An unexpected error occurred: ${JSON.stringify(data)}`);
         }
 
-        logger.error('Formatted error', formattedError, { originalError: error });
+        logger.error('Formatted error details:', {
+            error: formattedError,
+            originalError: {
+                status: error.response.status,
+                data: error.response.data,
+                headers: error.response.headers
+            }
+        });
         return formattedError;
     }
 
@@ -120,19 +144,13 @@ class MutualFundFetchAPI {
         logger.info('Sending OTP for MF portfolio fetch', { params });
 
         try {
-            logger.debug('Making API call', {
-                endpoint: this.endpoints.sendOTP,
-                method: 'POST',
-                params
-            });
+            logger.debug('Making API call', apiClient);
 
-            const response = await apiClient.withRetry(() =>
-                apiClient.post(this.endpoints.sendOTP, {
-                    pan: params.pan,
-                    mobileNumber: params.mobileNumber,
-                    provider: params.provider
-                })
-            );
+            const response = await apiClient.post(this.endpoints.sendOTP, {
+                pan: params.pan,
+                mobileNumber: params.mobileNumber,
+                provider: params.provider
+            });
 
             logger.info('OTP sent successfully', {
                 fetchRequestId: response.utilityReferenceId,
@@ -162,10 +180,12 @@ class MutualFundFetchAPI {
                 endpoint,
                 method: 'POST'
             });
+            console.log(" 2222", otp);
 
-            const response = await apiClient.withRetry(() =>
-                apiClient.post(endpoint, { otp })
-            );
+            const response = await apiClient.post(endpoint, {
+                otp: otp,
+                fetchRequestId: fetchRequestId
+            });
 
             logger.info('OTP validated successfully', {
                 fetchRequestId,
@@ -188,6 +208,7 @@ class MutualFundFetchAPI {
         logger.info('Getting MF portfolio details', { fetchRequestId });
 
         try {
+
             const endpoint = this.endpoints.portfolioDetails.replace('{fetchRequestId}', fetchRequestId);
             
             logger.debug('Making API call', {
@@ -195,9 +216,7 @@ class MutualFundFetchAPI {
                 method: 'GET'
             });
 
-            const response = await apiClient.withRetry(() =>
-                apiClient.get(endpoint)
-            );
+            const response = await apiClient.get(endpoint);
 
             logger.info('Retrieved portfolio details successfully', {
                 fetchRequestId,
@@ -213,4 +232,4 @@ class MutualFundFetchAPI {
 }
 
 // Export singleton instance
-module.exports = new MutualFundFetchAPI(); 
+module.exports = MutualFundFetchAPI; 

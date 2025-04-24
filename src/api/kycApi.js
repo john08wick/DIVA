@@ -36,4 +36,4 @@ class KycAPI {
     }
 }
 
-module.exports = new KycAPI();
+module.exports = KycAPI;

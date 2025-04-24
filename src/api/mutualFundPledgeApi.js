@@ -49,4 +49,4 @@ class MutualFundPledgeAPI {
 }
 
 // Export singleton instance
-module.exports = new MutualFundPledgeAPI(); 
+module.exports = MutualFundPledgeAPI; 

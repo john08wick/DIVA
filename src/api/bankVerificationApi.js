@@ -197,4 +197,4 @@ class BankVerificationAPI {
 }
 
 // Export singleton instance
-module.exports = new BankVerificationAPI(); 
+module.exports = BankVerificationAPI

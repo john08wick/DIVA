@@ -17,9 +17,9 @@ const config = {
     // API endpoints
     endpoints: {
         mutualFund: {
-            sendOTP: '/v1/mf/send-otp',
-            validateOTP: '/v1/mf/validate-otp',
-            portfolioDetails: '/v1/mf/portfolio',
+            sendOTP: '/mutualFund/fetch/trigger-otp',
+            validateOTP: '/mutualFund/fetch/{fetchRequestId}/validate-otp',
+            portfolioDetails: '/mutualFund/fetch/{fetchRequestId}',
             pledge: {
                 sendOTP: '/mutualFund/pledge/trigger-otp',
                 validateOTP: '/mutualFund/pledge/{pledgeRequestId}/verify-otp',

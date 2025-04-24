@@ -1,4 +1,5 @@
 const axios = require('axios');
+const apiClient = require('../utils/apiClient');
 
 class LoanAPI {
     constructor(baseURL) {
@@ -13,7 +14,8 @@ class LoanAPI {
 
     async createLead(mobile, email) {
         try {
-            const response = await this.api.post('/lead', { mobile, email });
+            console.log("Creating lead with mobile:", mobile, "and email:", email);
+            const response = await apiClient.post('/lead', { mobile, email });
             return response.data;
         } catch (error) {
             throw new Error(`Failed to create lead: ${error.message}`);

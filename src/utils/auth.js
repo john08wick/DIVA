@@ -1,13 +1,19 @@
 const crypto = require('crypto');
 
 /**
- * Generate timestamp in yyyyMMddHHmmss format
+ * Generate timestamp in format yyyyMMddHHmmss
  * @returns {string} Formatted timestamp
  */
 function generateTimestamp() {
-    return new Date().toISOString()
-        .replace(/[-:T.]/g, '')
-        .slice(0, 14);
+    const now = new Date();
+    const year = now.getFullYear();
+    const month = String(now.getMonth() + 1).padStart(2, '0');
+    const day = String(now.getDate()).padStart(2, '0');
+    const hours = String(now.getHours()).padStart(2, '0');
+    const minutes = String(now.getMinutes()).padStart(2, '0');
+    const seconds = String(now.getSeconds()).padStart(2, '0');
+    
+    return `${year}${month}${day}${hours}${minutes}${seconds}`;
 }
 
 /**
@@ -49,27 +55,19 @@ function generateSignature(method, timestamp, body = null) {
  * @param {object|null} body Request body for POST requests
  * @returns {object} Headers object with authentication details
  */
-function getAuthHeaders(method, body = null) {
+async function getAuthHeaders(method, body = null) {
     const timestamp = generateTimestamp();
     const signature = generateSignature(method, timestamp, body);
+    
     const channelCode = process.env.DSP_CHANNEL_CODE;
-
     if (!channelCode) {
         throw new Error('DSP_CHANNEL_CODE must be configured in environment variables');
     }
 
-    console.log('[Auth Debug] Generating headers:', {
-        timestamp,
-        signature,
-        channelCode,
-        method,
-        bodyLength: body ? JSON.stringify(body).length : 0
-    });
-
     return {
-        'X-Timestamp': timestamp,
+        'X-SourcingChannelCode': channelCode,
         'X-Signature': signature,
-        'X-SourcingChannelCode': channelCode
+        'X-Timestamp': timestamp
     };
 }
 
