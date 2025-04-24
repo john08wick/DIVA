@@ -17,9 +17,7 @@ class MutualFundPledgeAPI {
      * @returns {Promise<Object>} Response containing pledge request details
      */
     async sendOTPForPledge(params) {
-        return apiClient.withRetry(() =>
-            apiClient.post(this.endpoints.sendOTP, params)
-        );
+        return apiClient.post(this.endpoints.sendOTP, params)
     }
 
     /**
@@ -30,9 +28,7 @@ class MutualFundPledgeAPI {
      */
     async validateOTP(pledgeRequestId, otp) {
         const endpoint = this.endpoints.validateOTP.replace('{pledgeRequestId}', pledgeRequestId);
-        return apiClient.withRetry(() =>
-            apiClient.post(endpoint, { OTP: otp })
-        );
+        return apiClient.post(endpoint, { OTP: otp });
     }
 
     /**

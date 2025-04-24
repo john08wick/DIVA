@@ -9,6 +9,7 @@ const PersonalizationEngine = require('./PersonalizationEngine');
 const BankVerificationAPI = require('../api/bankVerificationApi');
 const MutualFundFetchAPI = require('../api/mutualFundFetchApi');
 const MutualFundPledgeAPI = require('../api/mutualFundPledgeApi');
+const OpportunityAPI = require('../api/opportunityApi');
 const api = require('../utils/apiClient');
 
 // Add logging utility
@@ -50,6 +51,7 @@ class LoanAssistant {
         this.bankVerificationApi = BankVerificationAPI;
         this.mutualFundFetchApi = MutualFundFetchAPI;
         this.mutualFundPledgeApi = MutualFundPledgeAPI;
+        this.opportunityApi = OpportunityAPI;
         this.kycApi = require('../api/kycApi');
         this.mandateApi = require('../api/mandateApi');
         this.agreementApi = require('../api/agreementApi');
@@ -1576,6 +1578,80 @@ Please choose an option that works best for you.`, language),
             functionName,
             timestamp: this.conversationContext.messageStatus.timestamp
         });
+    }
+
+    async createOpportunity(params) {
+        try {
+            logger.info('Creating opportunity', params);
+            
+            // Validate required parameters
+            const requiredParams = ['pan', 'phoneNumber', 'email'];
+            const missingParams = requiredParams.filter(param => !params[param]);
+            if (missingParams.length > 0) {
+                throw new Error(`Missing required parameters: ${missingParams.join(', ')}`);
+            }
+
+            // Validate PAN format
+            if (!this.validatePAN(params.pan)) {
+                throw new Error('Invalid PAN format');
+            }
+
+            // Validate phone number format
+            if (!this.validatePhoneNumber(params.phoneNumber)) {
+                throw new Error('Invalid phone number format');
+            }
+
+            // Validate email format
+            if (!this.validateEmail(params.email)) {
+                throw new Error('Invalid email format');
+            }
+
+            const opportunityData = {
+                pan: params.pan,
+                product: "LAS",
+                opportunityType: "LOAN_CREATION",
+                phoneNumber: params.phoneNumber,
+                email: params.email
+            };
+
+            const response = await this.opportunityApi.createOpportunity(opportunityData);
+
+            if (response.success) {
+                // Update conversation context with opportunity details
+                this.conversationContext.opportunityId = response.data.opportunityId;
+                this.conversationContext.userInfo.pan = params.pan;
+                this.conversationContext.userInfo.mobile = params.phoneNumber;
+                this.conversationContext.userInfo.email = params.email;
+                this.conversationContext.userInfo.lastUpdated = new Date();
+
+                return {
+                    success: true,
+                    message: "Opportunity created successfully.",
+                    data: response.data
+                };
+            }
+
+            throw new Error(response.error || 'Failed to create opportunity');
+        } catch (error) {
+            logger.error('Error in opportunity creation', error, params);
+            return {
+                success: false,
+                message: `Error creating opportunity: ${error.message}`,
+                error: error
+            };
+        }
+    }
+
+    validatePhoneNumber(phoneNumber) {
+        // Basic phone number validation for Indian numbers
+        const phoneRegex = /^[6-9]\d{9}$/;
+        return phoneRegex.test(phoneNumber);
+    }
+
+    validateEmail(email) {
+        // Basic email validation
+        const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+        return emailRegex.test(email);
     }
 }
 

@@ -31,7 +31,11 @@ const config = {
                 init: '/utility/bank/verification/init',
                 status: '/utility/bank/verification/{utilityReferenceId}'
             }
+        },
+        opportunity: {
+            create: '/opportunity'
         }
+
     },
 
     // Request timeouts (in milliseconds)

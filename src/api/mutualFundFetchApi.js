@@ -157,7 +157,7 @@ class MutualFundFetchAPI {
                 status: response.status
             });
 
-            return this.formatPortfolioResponse(response);
+            return response;
         } catch (error) {
             logger.error('Failed to send OTP', error, { params });
             throw this.handleError(error);
@@ -192,7 +192,7 @@ class MutualFundFetchAPI {
                 status: response.status
             });
 
-            return this.formatPortfolioResponse(response);
+            return response;
         } catch (error) {
             logger.error('Failed to validate OTP', error, { fetchRequestId });
             throw this.handleError(error);
@@ -223,7 +223,7 @@ class MutualFundFetchAPI {
                 status: response.status
             });
 
-            return this.formatPortfolioResponse(response);
+            return response;
         } catch (error) {
             logger.error('Failed to get portfolio details', error, { fetchRequestId });
             throw this.handleError(error);

@@ -12,6 +12,7 @@ const MandateAPI = require('./api/mandateApi');
 const AgreementAPI = require('./api/agreementApi');
 const KfsApi = require('./api/kfsApi');
 const VerificationLogApi = require('./api/verificationLogApi');
+const OpportunityApi = require('./api/opportunityApi');
 
 const app = express();
 const port = process.env.PORT || 3000;
@@ -43,6 +44,7 @@ const mandateApi = new MandateAPI();
 const agreementApi = new AgreementAPI();
 const kfsApi = new KfsApi();
 const verificationLogApi = new VerificationLogApi();
+const opportunityApi = new OpportunityApi();
 assistant.initialize().catch(console.error);
 
 app.use(bodyParser.json());
@@ -219,10 +221,10 @@ app.post('/mf/pledge/send-otp', async (req, res) => {
     }
 });
 
-app.post('/mf/pledge/:pledgeRequestId/validate-otp', async (req, res) => {
+app.post('/mf/pledge/validate-otp', async (req, res) => {
     try {
-        const { otp } = req.body;
-        const response = await mutualFundPledgeApi.validateOTP(req.params.pledgeRequestId, otp);
+        const { utilityReferenceId, otp } = req.body;
+        const response = await mutualFundPledgeApi.validateOTP(utilityReferenceId, otp);
         res.json({ success: true, data: response });
     } catch (error) {
         res.status(500).json({ success: false, error: error.message });
@@ -267,6 +269,14 @@ app.post('/agreement/initiate', async (req, res) => {
     }
 });
 
+app.post('/opportunity/create', async (req, res) => {
+    try {
+        const response = await opportunityApi.createOpportunity(req.body);
+        res.json({ success: true, data: response });
+    } catch (error) {
+        res.status(500).json({ success: false, error: error.message });
+    }
+});
 app.listen(port, () => {
     console.log(`Loan application assistant listening on port ${port}`);
 }); 

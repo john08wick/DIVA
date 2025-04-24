@@ -5,6 +5,7 @@ const { MemoryVectorStore } = require('langchain/vectorstores/memory');
 class DocumentStore {
     constructor() {
         this.vectorStore = null;
+        console.log(" 2222", process.env.OPENAI_API_KEY);
         this.embeddings = new OpenAIEmbeddings({
             openAIApiKey: process.env.OPENAI_API_KEY
         });
