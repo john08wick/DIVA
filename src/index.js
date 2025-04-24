@@ -1,6 +1,7 @@
 require('dotenv').config();
 const express = require('express');
 const bodyParser = require('body-parser');
+const cors = require('cors');
 const LoanAssistant = require('./assistant/LoanAssistant');
 const LoanAPI = require('./api/loanApi');
 const KycAPI = require('./api/kycApi');
@@ -14,6 +15,13 @@ const VerificationLogApi = require('./api/verificationLogApi');
 
 const app = express();
 const port = process.env.PORT || 3000;
+
+// Enable CORS
+app.use(cors({
+    origin: '*',  // Allow all origins
+    methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'],
+    allowedHeaders: ['Content-Type', 'Authorization', 'X-SourcingChannelCode', 'X-Signature', 'X-Timestamp']
+}));
 
 // Initialize the loan assistant
 const assistant = new LoanAssistant();
